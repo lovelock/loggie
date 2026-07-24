@@ -1,32 +1,13 @@
-//go:build driver_badger
-
-/*
-Copyright 2023 Loggie Authors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package driver
 
 import (
 	"fmt"
-	"github.com/dgraph-io/badger/v3"
-	"github.com/loggie-io/loggie/pkg/core/log"
-	"github.com/loggie-io/loggie/pkg/util/json"
-	"github.com/loggie-io/loggie/pkg/util/persistence/reg"
-	"github.com/pkg/errors"
 	"math"
 	"time"
+
+	"github.com/dgraph-io/badger/v4"
+	"github.com/loggie-io/loggie/pkg/core/log"
+	"github.com/loggie-io/loggie/pkg/util/persistence/reg"
 )
 
 type Engine struct {
@@ -88,9 +69,9 @@ func (e *Engine) Insert(registries []reg.Registry) error {
 				value := registry.Value()
 				err := txn.Set(key, value)
 				if err != nil {
-					return errors.WithMessagef(err, "insert registry %s fail", key)
+					return fmt.Errorf("insert registry %s fail: %w", key, err)
 				}
-				log.Debug("inserted registry %s: %s", key, value)
+				log.Debug("inserted registry %s", key)
 			}
 			return nil
 		})
@@ -141,11 +122,12 @@ func (e *Engine) Update(registries []reg.Registry) error {
 						log.Error("fail to get registry %s bytes: %s", key, err)
 						continue
 					}
-					err = json.Unmarshal(valueCopy, &oldRegistry)
+					decoded, err := reg.DecodeRegistry(valueCopy)
 					if err != nil {
 						log.Error("fail to decode registry %s: %s", key, err)
 						continue
 					}
+					oldRegistry = decoded
 					log.Debug("get old version registry before updating %s", valueCopy)
 					oldRegistry.Merge(registry)
 					value = oldRegistry.Value()
@@ -157,7 +139,7 @@ func (e *Engine) Update(registries []reg.Registry) error {
 				if err != nil {
 					return err
 				}
-				log.Debug("updated registry %s : %s", key, value)
+				log.Debug("updated registry %s", key)
 			}
 			return nil
 		})
@@ -201,10 +183,9 @@ func (e *Engine) FindAll() ([]reg.Registry, error) {
 		for iterator.Rewind(); iterator.Valid(); iterator.Next() {
 			item := iterator.Item()
 			_ = item.Value(func(val []byte) error {
-				registry := reg.Registry{}
-				err := json.Unmarshal(val, &registry)
+				registry, err := reg.DecodeRegistry(val)
 				if err != nil {
-					return errors.WithMessagef(err, "fail to decode registry %s", item.Key())
+					return fmt.Errorf("fail to decode registry %s: %w", item.Key(), err)
 				}
 				list = append(list, registry)
 				return nil
@@ -229,12 +210,12 @@ func (e *Engine) FindBy(jobUid string, sourceName string, pipelineName string) (
 			log.Error("fail to get registry %s bytes: %s", key, err)
 			return err
 		}
-		err = json.Unmarshal(valueCopy, &registry)
+		decoded, err := reg.DecodeRegistry(valueCopy)
 		if err != nil {
 			log.Error("fail to decode registry %s: %s", key, err)
-			registry = reg.Registry{}
 			return err
 		}
+		registry = decoded
 		return nil
 	})
 

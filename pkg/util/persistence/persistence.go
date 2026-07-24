@@ -28,9 +28,6 @@ import (
 )
 
 const (
-	DriverSqlite = "sqlite"
-	DriverBadger = "badger"
-
 	TimeFormatPattern = "2006-01-02 15:04:05.999"
 
 	DeleteByIdOpt               = DbOptType(1)
@@ -52,6 +49,11 @@ type DbOpt struct {
 	Immediately bool
 }
 
+// compositeKey builds a map key from the registry's identifying fields.
+func compositeKey(jobUid, sourceName, pipelineName string) string {
+	return jobUid + "/" + sourceName + "/" + pipelineName
+}
+
 type DbHandler struct {
 	done      chan struct{}
 	config    DbConfig
@@ -60,18 +62,35 @@ type DbHandler struct {
 	dbFile    string
 	countDown sync.WaitGroup
 	optChan   chan DbOpt
+
+	// registryIndex caches compositeKey → Registry.Id for O(1) lookups.
+	// Only accessed from the run() goroutine, no lock needed.
+	registryIndex map[string]int
 }
 
 func NewDbHandler(config DbConfig) *DbHandler {
 	d := &DbHandler{
-		done:    make(chan struct{}),
-		config:  config,
-		State:   make(chan *State, config.BufferSize),
-		optChan: make(chan DbOpt),
+		done:          make(chan struct{}),
+		config:        config,
+		State:         make(chan *State, config.BufferSize),
+		optChan:       make(chan DbOpt),
+		registryIndex: make(map[string]int),
 	}
 
 	d.dbFile = d.config.File
 	d.db = driver.Init(d.dbFile)
+
+	// Populate index from existing DB records on startup.
+	all, err := d.db.FindAll()
+	if err != nil {
+		log.Error("load registry index fail: %s", err)
+	} else {
+		for _, r := range all {
+			key := compositeKey(r.JobUid, r.SourceName, r.PipelineName)
+			d.registryIndex[key] = r.Id
+		}
+		log.Info("loaded %d registry entries into index", len(all))
+	}
 
 	go d.run()
 	return d
@@ -195,28 +214,22 @@ func (d *DbHandler) FindBy(jobUid string, sourceName string, pipelineName string
 	return result
 }
 
-// only one thread invoke,without lock
+// write is only called from the run() goroutine — single-threaded, no lock needed.
 func (d *DbHandler) write(stats []*State) {
 	css := compressStats(stats)
 
-	registries := d.FindAll()
-	insertRegistries := make([]reg.Registry, 0)
-	updateRegistries := make([]reg.Registry, 0)
+	updateRegistries := make([]reg.Registry, 0, len(css))
 
 	for _, cs := range css {
 		stat := cs.last
 		r := d.state2Registry(stat)
-		if id, ok := contain(registries, stat); ok {
-			tempId := id
-			r.Id = tempId
+		key := compositeKey(stat.JobUid, stat.SourceName, stat.PipelineName)
+		if id, ok := d.registryIndex[key]; ok {
+			r.Id = id
 			updateRegistries = append(updateRegistries, r)
 		} else {
-			log.Warn("The registry record corresponding to stat(%+v) has been deleted, stat will be ignore!", stat)
+			log.Warn("The registry record corresponding to stat(%+v) has been deleted, stat will be ignored!", stat)
 		}
-	}
-
-	if len(insertRegistries) > 0 {
-		d.insertRegistry(insertRegistries)
 	}
 
 	if len(updateRegistries) > 0 {
@@ -240,12 +253,21 @@ func (d *DbHandler) state2Registry(stat *State) reg.Registry {
 func (d *DbHandler) insertRegistry(registries []reg.Registry) {
 	if err := d.db.Insert(registries); err != nil {
 		log.Error("insert registry fail: %s", err)
+		return
+	}
+	for _, r := range registries {
+		key := compositeKey(r.JobUid, r.SourceName, r.PipelineName)
+		d.registryIndex[key] = r.Id
 	}
 }
 
 func (d *DbHandler) updateRegistry(registries []reg.Registry) {
 	if err := d.db.Update(registries); err != nil {
 		log.Error("update registry fail: %+v", err)
+	}
+	for _, r := range registries {
+		key := compositeKey(r.JobUid, r.SourceName, r.PipelineName)
+		d.registryIndex[key] = r.Id
 	}
 }
 
@@ -261,11 +283,9 @@ func (d *DbHandler) upsertOffsetByJobWatchId(r reg.Registry) {
 
 	or := d.FindBy(r.JobUid, r.SourceName, r.PipelineName)
 	if or.JobUid != "" {
-		// update
 		r.Id = or.Id
 		d.updateRegistry([]reg.Registry{r})
 	} else {
-		// insert
 		d.insertRegistry([]reg.Registry{r})
 	}
 }
@@ -275,6 +295,8 @@ func (d *DbHandler) delete(r reg.Registry) {
 		log.Error("%s fail to delete registry %s : %s", d.String(), r.Key(), err)
 		return
 	}
+	key := compositeKey(r.JobUid, r.SourceName, r.PipelineName)
+	delete(d.registryIndex, key)
 	log.Info("delete registry %s. file: %s", r.Key(), r.Filename)
 }
 
@@ -285,6 +307,8 @@ func (d *DbHandler) deleteRemoved(rs []reg.Registry) {
 			log.Error("%s delete registry fail: %s", d.String(), err)
 			return
 		}
+		key := compositeKey(registry.JobUid, registry.SourceName, registry.PipelineName)
+		delete(d.registryIndex, key)
 		log.Info("delete registry(%+v). ", registry)
 	}
 }
@@ -298,7 +322,6 @@ func (d *DbHandler) cleanData() {
 		}
 		t := text2time(collectTime)
 		if time.Since(t) >= d.config.CleanInactiveTimeout {
-			// delete
 			log.Info("clean inactive registry: %s because CleanInactiveTimeout(%dh) reached ", r.Key(), d.config.CleanInactiveTimeout/time.Hour)
 			d.delete(r)
 		}
@@ -315,15 +338,6 @@ func text2time(date string) time.Time {
 
 func time2text(date time.Time) string {
 	return date.Format(TimeFormatPattern)
-}
-
-func contain(registries []reg.Registry, state *State) (id int, ok bool) {
-	for _, r := range registries {
-		if r.PipelineName == state.PipelineName && r.SourceName == state.SourceName && r.JobUid == state.JobUid {
-			return r.Id, true
-		}
-	}
-	return -1, false
 }
 
 func compressStats(stats []*State) []compressStatPair {

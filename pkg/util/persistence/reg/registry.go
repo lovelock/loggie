@@ -1,24 +1,7 @@
-/*
-Copyright 2023 Loggie Authors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package reg
 
 import (
-	"bytes"
-	"github.com/loggie-io/loggie/pkg/util/json"
+	"encoding/binary"
 )
 
 type Registry struct {
@@ -39,19 +22,42 @@ func (r *Registry) Key() []byte {
 	return GenKey(r.JobUid, r.SourceName, r.PipelineName)
 }
 
-func GenKey(jobuid, source, pipeline string) []byte {
-	var bb bytes.Buffer
-	bb.WriteString(jobuid)
-	bb.WriteString("/")
-	bb.WriteString(source)
-	bb.WriteString("/")
-	bb.WriteString(pipeline)
-	return bb.Bytes()
+// Key format: length-prefixed encoding, collision-free
+//
+//   +------+--------+------+--------+------+----------+
+//   | len  | jobUid | len  | source | len  | pipeline |
+//   |uint16| []byte |uint16| []byte |uint16| []byte   |
+//   +------+--------+------+--------+------+----------+
+//
+// Length prefix is uint16 little-endian (max 65535 bytes per component).
+// This avoids key ambiguity when components contain '/' or other delimiters.
+//
+// Old format used '/' separator: "jobUid/source/pipeline"
+// Problem: K8s names often contain '/', causing collisions:
+//   key("ns/pod", "svc", "pipe") == key("ns", "pod/svc", "pipe")
+// New format: length prefix eliminates this.
+func GenKey(jobUid, source, pipeline string) []byte {
+	jb := []byte(jobUid)
+	sb := []byte(source)
+	pb := []byte(pipeline)
+	buf := make([]byte, 2+len(jb)+2+len(sb)+2+len(pb))
+	off := 0
+	binary.LittleEndian.PutUint16(buf[off:], uint16(len(jb)))
+	off += 2
+	copy(buf[off:], jb)
+	off += len(jb)
+	binary.LittleEndian.PutUint16(buf[off:], uint16(len(sb)))
+	off += 2
+	copy(buf[off:], sb)
+	off += len(sb)
+	binary.LittleEndian.PutUint16(buf[off:], uint16(len(pb)))
+	off += 2
+	copy(buf[off:], pb)
+	return buf
 }
 
 func (r *Registry) Value() []byte {
-	marshal, _ := json.Marshal(r)
-	return marshal
+	return r.Encode()
 }
 
 func (r *Registry) CheckIntegrity() bool {
