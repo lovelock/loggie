@@ -95,16 +95,6 @@ func (k *Source) Start() error {
 		return err
 	}
 
-	client := &kafka.Client{
-		Addr: kafka.TCP(k.config.Brokers...),
-		Transport: &kafka.Transport{
-			Dial: (&net.Dialer{
-				Timeout: 3 * time.Second,
-			}).DialContext,
-			SASL: mechanism,
-		},
-	}
-
 	// list all Kafka topics by pattern
 	var confTopic []string
 	if k.config.Topic != "" {
@@ -112,6 +102,17 @@ func (k *Source) Start() error {
 	}
 	if len(k.config.Topics) > 0 {
 		confTopic = append(confTopic, k.config.Topics...)
+	}
+
+	client := &kafka.Client{
+		Addr: kafka.TCP(k.config.Brokers...),
+		Transport: &kafka.Transport{
+			Dial: (&net.Dialer{
+				Timeout: 3 * time.Second,
+			}).DialContext,
+			SASL:           mechanism,
+			MetadataTopics: confTopic,
+		},
 	}
 
 	var kTopics []kafka.Topic
