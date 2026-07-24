@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build binaries
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          LDFLAGS="-s -w -X github.com/loggie-io/loggie/pkg/core/global._VERSION_=${VERSION}"
+
+          GOOS=linux   GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o loggie-linux-amd64   cmd/loggie/main.go
+          GOOS=linux   GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o loggie-linux-arm64   cmd/loggie/main.go
+          GOOS=darwin  GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o loggie-darwin-arm64  cmd/loggie/main.go
+          GOOS=darwin  GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o loggie-darwin-amd64  cmd/loggie/main.go
+
+      - name: Package
+        run: |
+          for f in loggie-linux-amd64 loggie-linux-arm64 loggie-darwin-arm64 loggie-darwin-amd64; do
+            tar czf "${f}.tar.gz" "${f}"
+          done
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            loggie-linux-amd64.tar.gz
+            loggie-linux-arm64.tar.gz
+            loggie-darwin-arm64.tar.gz
+            loggie-darwin-amd64.tar.gz
