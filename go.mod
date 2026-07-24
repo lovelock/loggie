@@ -1,6 +1,6 @@
 module github.com/loggie-io/loggie
 
-go 1.21
+go 1.23.0
 
 require (
 	github.com/aliyun/aliyun-log-go-sdk v0.1.35
@@ -14,7 +14,7 @@ require (
 	github.com/go-playground/validator/v10 v10.4.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v0.0.3
-	github.com/google/go-cmp v0.5.9
+	github.com/google/go-cmp v0.6.0
 	github.com/hpcloud/tail v1.0.0
 	github.com/jcmturner/gokrb5/v8 v8.4.3
 	github.com/json-iterator/go v1.1.12
@@ -29,7 +29,7 @@ require (
 	github.com/prometheus/prometheus v1.8.2-0.20201028100903-3245b3267b24
 	github.com/rivo/tview v0.0.0-20221029100920-c4a7e501810d
 	github.com/rs/zerolog v1.20.0
-	github.com/segmentio/kafka-go v0.4.39
+	github.com/segmentio/kafka-go v0.4.51
 	github.com/shirou/gopsutil/v3 v3.22.2
 	github.com/smartystreets-prototypes/go-disruptor v0.0.0-20200316140655-c96477fd7a6a
 	github.com/stretchr/testify v1.8.2
@@ -37,8 +37,8 @@ require (
 	github.com/twmb/franz-go/pkg/sasl/kerberos v1.1.0
 	go.uber.org/atomic v1.7.0
 	go.uber.org/automaxprocs v1.5.1
-	golang.org/x/net v0.17.0
-	golang.org/x/text v0.13.0
+	golang.org/x/net v0.38.0
+	golang.org/x/text v0.23.0
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
 	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.30.0
@@ -94,14 +94,18 @@ require (
 	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.2.0 // indirect
+	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
+	github.com/xdg-go/scram v1.1.2 // indirect
+	github.com/xdg-go/stringprep v1.0.4 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
-	golang.org/x/crypto v0.14.0 // indirect
-	golang.org/x/mod v0.8.0 // indirect
+	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
-	golang.org/x/sys v0.13.0 // indirect
-	golang.org/x/term v0.13.0 // indirect
-	golang.org/x/tools v0.6.0 // indirect
+	golang.org/x/sync v0.12.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/term v0.30.0 // indirect
+	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368 // indirect
@@ -159,8 +163,6 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
 	github.com/tklauser/numcpus v0.3.0 // indirect
-	github.com/xdg/scram v1.0.5 // indirect
-	github.com/xdg/stringprep v1.0.3 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
