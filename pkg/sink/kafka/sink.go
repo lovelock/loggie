@@ -106,7 +106,8 @@ func (s *Sink) Start() error {
 		Compression:            compression(c.Compression),
 		AllowAutoTopicCreation: true,
 		Transport: &kafka.Transport{
-			SASL: mechanism,
+			SASL:           mechanism,
+			MetadataTopics: []string{s.config.Topic},
 		},
 	}
 
