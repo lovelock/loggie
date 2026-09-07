@@ -182,13 +182,41 @@ func (s *Sink) Consume(batch api.Batch) api.Result {
 				return result.Success()
 			}
 
-			return result.Fail(errors.WithMessage(err, "write to kafka"))
+			return result.Fail(errors.WithMessage(enrichErrorWithTopics(err, km), "write to kafka"))
 		}
 
 		return result.Success()
 	}
 
 	return result.Fail(errors.New("kafka sink writer not initialized"))
+}
+
+// enrichErrorWithTopics appends the failed topics to a kafka.WriteErrors error,
+// since kafka-go only reports the error code without telling which topic failed.
+func enrichErrorWithTopics(err error, msgs []kafka.Message) error {
+	writeErrs, ok := err.(kafka.WriteErrors)
+	if !ok {
+		return err
+	}
+
+	topicSet := make(map[string]struct{})
+	for i, e := range writeErrs {
+		if e == nil || i >= len(msgs) {
+			continue
+		}
+		topicSet[msgs[i].Topic] = struct{}{}
+	}
+
+	if len(topicSet) == 0 {
+		return err
+	}
+
+	topics := make([]string, 0, len(topicSet))
+	for t := range topicSet {
+		topics = append(topics, t)
+	}
+
+	return errors.WithMessage(err, fmt.Sprintf("failed topics: %v", topics))
 }
 
 func (s *Sink) selectTopic(e api.Event) (string, error) {
