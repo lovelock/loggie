@@ -1,3 +1,13 @@
+# Release v2.1.0
+
+### :star2: Features
+- [breaking]: The default `sink codec` type is changed from `json` to `raw`. Previously, when `codec` was not configured, the `json` codec would wrap the raw log body into a JSON object; now the `raw` codec is used by default and the raw log body is emitted as-is. If you rely on the old JSON wrapping behavior, set `codec.type: json` explicitly in your sink configuration.
+
+# Release v2.0.1
+
+### :bug: Bug Fixes
+- Enriched kafka sink write error with failed topics to ease ACL troubleshooting.
+
 # Release v1.5.0-rc.0
 
 ### :star2: Features
