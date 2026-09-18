@@ -1020,34 +1020,26 @@ func (w *Watcher) cleanFiles(watchTask *WatchTask, infos []eventbus.FileInfo) []
 		return nil
 	}
 
-	var maxHistoryDays int
-	if watchTask.config.CleanFiles != nil {
-		maxHistoryDays = watchTask.config.CleanFiles.MaxHistoryDays
-	}
-
-	history, err := time.ParseDuration(fmt.Sprintf("%dh", maxHistoryDays*24))
-	if err != nil {
-		log.Warn("parse duration of cleanLogs.maxHistoryDays error: %v", err)
+	cleanFiles := watchTask.config.CleanFiles
+	history := time.Duration(cleanFiles.MaxHistoryDays*24) * time.Hour
+	history += time.Duration(cleanFiles.MaxHistoryHours) * time.Hour
+	if history <= 0 {
 		return nil
 	}
 
 	var fileRemoved []string
 	for _, info := range infos {
-		if maxHistoryDays > 0 {
-			if time.Since(info.LastModifyTime) < history {
-				continue
-			}
-
-			// if file is not finished, do not remove it
-			if watchTask.config.CleanFiles != nil {
-				if !watchTask.config.CleanFiles.CleanUnfinished && info.Offset < info.Size {
-					continue
-				}
-			}
-
-			_ = truncateAndRemoveFile(info.FileName)
-			fileRemoved = append(fileRemoved, info.FileName)
+		if time.Since(info.LastModifyTime) < history {
+			continue
 		}
+
+		// if file is not finished, do not remove it
+		if !cleanFiles.CleanUnfinished && info.Offset < info.Size {
+			continue
+		}
+
+		_ = truncateAndRemoveFile(info.FileName)
+		fileRemoved = append(fileRemoved, info.FileName)
 	}
 
 	return fileRemoved
